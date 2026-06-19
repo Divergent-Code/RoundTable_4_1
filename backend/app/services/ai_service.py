@@ -5,6 +5,7 @@ from app.services.context_builder import build_narrative_context
 from app.models import GameState
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
 import json
 from uuid import uuid4
 from typing import Optional
@@ -213,11 +214,17 @@ class AIService:
         return None, None
 
     @staticmethod
-    async def save_memory(campaign_id: str, summary_text: str, db: AsyncSession):
-        await db.execute(
-            text("INSERT INTO campaign_memories (id, campaign_id, summary_text) VALUES (:id, :cid, :txt)"),
-            {"id": str(uuid4()), "cid": campaign_id, "txt": summary_text}
-        )
+    async def save_memory(campaign_id: str, summary_text: str, db: AsyncSession, created_at: Optional[datetime] = None):
+        if created_at:
+            await db.execute(
+                text("INSERT INTO campaign_memories (id, campaign_id, summary_text, created_at) VALUES (:id, :cid, :txt, :created_at)"),
+                {"id": str(uuid4()), "cid": campaign_id, "txt": summary_text, "created_at": created_at}
+            )
+        else:
+            await db.execute(
+                text("INSERT INTO campaign_memories (id, campaign_id, summary_text) VALUES (:id, :cid, :txt)"),
+                {"id": str(uuid4()), "cid": campaign_id, "txt": summary_text}
+            )
         await db.commit()
 
     @staticmethod
@@ -239,11 +246,13 @@ class AIService:
             if "DM Agent is offline" in row["content"] or "The DM is confused" in row["content"]:
                 continue
             if row["sender_id"] == "dm":
-                messages.append(AIMessage(content=row["content"]))
+                msg = AIMessage(content=row["content"])
             elif row["sender_id"] == "system":
-                messages.append(SystemMessage(content=row["content"]))
+                msg = SystemMessage(content=row["content"])
             else:
-                messages.append(HumanMessage(content=f"{row['sender_name']}: {row['content']}"))
+                msg = HumanMessage(content=f"{row['sender_name']}: {row['content']}")
+            msg.additional_kwargs["created_at"] = row.get("created_at")
+            messages.append(msg)
         return messages
 
     @staticmethod
@@ -259,29 +268,25 @@ class AIService:
         memory_text, memory_date = await AIService.get_latest_memory(campaign_id, db)
         recent_messages = await AIService.get_messages_after(campaign_id, memory_date, db)
 
-        # Summarization Check
+        # Summarization Check & Sliding Window Context
         if len(recent_messages) > 30:
-            to_summarize = recent_messages[:-10]
-            keep_messages = recent_messages[-10:]
-
-            summarization_context = to_summarize
-            if memory_text:
-                    summarization_context = [SystemMessage(content=f"PREVIOUS SUMMARY: {memory_text}")] + to_summarize
-
-            new_summary = await summarize_messages(summarization_context, api_key=api_key, llm_provider=llm_provider, model_name=model)
-
-            if new_summary:
-                await AIService.save_memory(campaign_id, new_summary, db)
-                memory_text = new_summary
-                recent_messages = keep_messages
+            memory_text_to_use = memory_text
+            messages_to_use = recent_messages[-10:]
+            
+            # Spin up background task to perform summarization and cleanup DB records
+            import asyncio
+            asyncio.create_task(run_background_summarization(campaign_id, api_key, model, llm_provider))
+        else:
+            memory_text_to_use = memory_text
+            messages_to_use = recent_messages
 
         # Construct History
-        final_history = recent_messages
+        final_history = messages_to_use
         if rich_context:
             final_history = [SystemMessage(content=f"SYSTEM CONTEXT (REFERENCE ONLY):\n{rich_context}")] + final_history
 
-        if memory_text:
-            final_history = [SystemMessage(content=f"STORY SO FAR: {memory_text}")] + final_history
+        if memory_text_to_use:
+            final_history = [SystemMessage(content=f"STORY SO FAR: {memory_text_to_use}")] + final_history
 
         inputs = {
             "messages": final_history,
@@ -448,3 +453,47 @@ class AIService:
             logger.error("Unexpected error during image generation: %s\n%s", str(e), traceback.format_exc())
 
         return None
+
+
+async def run_background_summarization(campaign_id: str, api_key: str, model: str, llm_provider: str):
+    """
+    Performs campaign message summarization in the background using a separate DB session.
+    """
+    logger.info(f"Background summarization started for campaign {campaign_id}")
+    try:
+        from db.session import AsyncSessionLocal
+        from app.services.ai_service import AIService
+        from app.agents.summarizer import summarize_messages
+        from langchain_core.messages import SystemMessage
+        async with AsyncSessionLocal() as session:
+            # Fetch latest memory
+            memory_text, memory_date = await AIService.get_latest_memory(campaign_id, session)
+            recent_messages = await AIService.get_messages_after(campaign_id, memory_date, session)
+
+            if len(recent_messages) > 30:
+                to_summarize = recent_messages[:-10]
+                
+                summarization_context = to_summarize
+                if memory_text:
+                    summarization_context = [SystemMessage(content=f"PREVIOUS SUMMARY: {memory_text}")] + to_summarize
+
+                logger.debug(f"Summarizing {len(to_summarize)} messages in background for campaign {campaign_id}...")
+                new_summary = await summarize_messages(
+                    summarization_context, 
+                    api_key=api_key, 
+                    llm_provider=llm_provider, 
+                    model_name=model
+                )
+
+                if new_summary:
+                    # Determine the exact timestamp of the last summarized message to keep the remaining 10 in future queries
+                    last_msg_date = to_summarize[-1].additional_kwargs.get("created_at") or datetime.now()
+                    
+                    await AIService.save_memory(campaign_id, new_summary, session, created_at=last_msg_date)
+                    logger.info(f"Background summarization complete for campaign {campaign_id}. Saved summary with date {last_msg_date}")
+                else:
+                    logger.warning(f"Background summarization returned empty summary for campaign {campaign_id}")
+            else:
+                logger.info(f"Campaign {campaign_id} has {len(recent_messages)} messages, no summarization needed")
+    except Exception as e:
+        logger.error(f"Error in background summarization for campaign {campaign_id}: {e}", exc_info=True)

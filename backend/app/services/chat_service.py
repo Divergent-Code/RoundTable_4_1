@@ -69,11 +69,13 @@ class ChatService:
             if "DM Agent is offline" in row["content"] or "The DM is confused" in row["content"]:
                 continue
             if row["sender_id"] == "dm":
-                messages.append(AIMessage(content=row["content"]))
+                msg = AIMessage(content=row["content"])
             elif row["sender_id"] == "system":
-                messages.append(SystemMessage(content=row["content"]))
+                msg = SystemMessage(content=row["content"])
             else:
-                messages.append(HumanMessage(content=f"{row['sender_name']}: {row['content']}"))
+                msg = HumanMessage(content=f"{row['sender_name']}: {row['content']}")
+            msg.additional_kwargs["created_at"] = row.get("created_at")
+            messages.append(msg)
         return messages
 
     @staticmethod
@@ -119,9 +121,11 @@ class ChatService:
                 if "DM Agent is offline" in row["content"] or "The DM is confused" in row["content"]:
                     continue
                 if row["sender_id"] == "dm":
-                    messages.append(AIMessage(content=row["content"]))
+                    msg = AIMessage(content=row["content"])
                 elif row["sender_id"] == "system":
-                    messages.append(SystemMessage(content=row["content"]))
+                    msg = SystemMessage(content=row["content"])
                 else:
-                    messages.append(HumanMessage(content=f"{row['sender_name']}: {row['content']}"))
+                    msg = HumanMessage(content=f"{row['sender_name']}: {row['content']}")
+                msg.additional_kwargs["created_at"] = row.get("created_at")
+                messages.append(msg)
             return messages
