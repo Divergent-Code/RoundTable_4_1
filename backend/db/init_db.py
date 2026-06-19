@@ -78,6 +78,23 @@ async def init_db_async():
             except SQLAlchemyError as e:
                 logger.warning(f"Migration Warning (quests columns): {e}")
 
+            # --- MIGRATIONS FOR INDEXES ---
+            try:
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_characters_campaign_id ON characters (campaign_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_game_states_campaign_id ON game_states (campaign_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_debug_logs_campaign_id ON debug_logs (campaign_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_campaign_participants_campaign_id ON campaign_participants (campaign_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_chat_messages_campaign_id ON chat_messages (campaign_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_campaign_memories_campaign_id ON campaign_memories (campaign_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_npcs_campaign_id ON npcs (campaign_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_locations_campaign_id ON locations (campaign_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_quests_campaign_id ON quests (campaign_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_spells_campaign_id ON spells (campaign_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_monsters_campaign_id ON monsters (campaign_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_items_campaign_id ON items (campaign_id)"))
+            except SQLAlchemyError as e:
+                logger.warning(f"Migration Warning (creating indexes): {e}")
+
         logger.debug("Schema creation transaction committed.")
     except SQLAlchemyError as e:
         logger.critical(f"Database initialization failed: {e}")

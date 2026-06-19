@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, insert, delete, desc, bindparam
@@ -8,12 +9,44 @@ from app.models import GameState, Player, Enemy, NPC, Vessel
 
 logger = logging.getLogger(__name__)
 
+class StateCache:
+    """
+    Thread-safe and centralized cache manager for campaign states.
+    Allows easy future migration to Redis/Memcached.
+    """
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._cache = {}
+
+    def get(self, campaign_id: str):
+        with self._lock:
+            return self._cache.get(campaign_id)
+
+    def set(self, campaign_id: str, state_dict: dict):
+        with self._lock:
+            self._cache[campaign_id] = state_dict
+
+    def __setitem__(self, campaign_id: str, state_dict: dict):
+        self.set(campaign_id, state_dict)
+
+    def __getitem__(self, campaign_id: str):
+        with self._lock:
+            return self._cache[campaign_id]
+
+    def pop(self, campaign_id: str, default=None):
+        with self._lock:
+            return self._cache.pop(campaign_id, default)
+
+    def clear(self):
+        with self._lock:
+            self._cache.clear()
+
 class StateService:
     """
     Handles all hydration, persistence, and querying of the GameState and its entities.
     Extracted from GameService to adhere to the Single Responsibility Principle.
     """
-    _last_broadcasted_state = {}
+    _last_broadcasted_state = StateCache()
 
     @classmethod
     def clear_campaign_state(cls, campaign_id: str):

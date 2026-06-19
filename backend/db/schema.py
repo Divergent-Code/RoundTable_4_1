@@ -60,7 +60,7 @@ debug_logs = Table(
     "debug_logs",
     metadata,
     Column("id", String, primary_key=True),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False, index=True),
     Column("type", String, nullable=False),
     Column("content", Text, nullable=True),
     Column("full_content", Text, nullable=True),
@@ -73,7 +73,7 @@ characters = Table(
     metadata,
     Column("id", String, primary_key=True),
     Column("user_id", String, ForeignKey("profiles.id"), nullable=False),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=True),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=True, index=True),
     Column("name", String, nullable=False),
     Column("role", String, nullable=False), # Class
     Column("race", String, server_default="Human"),
@@ -90,7 +90,7 @@ game_states = Table(
     "game_states",
     metadata,
     Column("id", String, primary_key=True),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False, index=True),
     Column("turn_index", Integer, server_default="0"),
     Column("phase", String, server_default="exploration"),
     Column("state_data", Text, nullable=False),
@@ -111,7 +111,7 @@ campaign_participants = Table(
     "campaign_participants",
     metadata,
     Column("id", String, primary_key=True),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False, index=True),
     Column("user_id", String, ForeignKey("profiles.id"), nullable=False),
     Column("role", String, nullable=False), # 'gm', 'player'
     Column("status", String, server_default="interested"), # 'active', 'interested', 'banned'
@@ -123,7 +123,7 @@ chat_messages = Table(
     "chat_messages",
     metadata,
     Column("id", String, primary_key=True),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False, index=True),
     Column("sender_id", String, nullable=False),
     Column("sender_name", String, nullable=False),
     Column("content", Text, nullable=False),
@@ -136,7 +136,7 @@ campaign_memories = Table(
     "campaign_memories",
     metadata,
     Column("id", String, primary_key=True),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False, index=True),
     Column("summary_text", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), server_default=func.now())
 )
@@ -146,7 +146,7 @@ npcs = Table(
     "npcs",
     metadata,
     Column("id", String, primary_key=True),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False, index=True),
     Column("source_id", String, nullable=True), # Original JSON ID
     Column("name", String, nullable=False),
     Column("role", String, nullable=True),
@@ -157,7 +157,7 @@ locations = Table(
     "locations",
     metadata,
     Column("id", String, primary_key=True),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False, index=True),
     Column("source_id", String, nullable=True), # Original JSON ID
     Column("name", String, nullable=False),
     Column("data", Text, nullable=False) # JSON: description, connections, secrets
@@ -167,7 +167,7 @@ quests = Table(
     "quests",
     metadata,
     Column("id", String, primary_key=True),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=False, index=True),
     Column("source_id", String, nullable=True), # Original JSON ID
     Column("title", String, nullable=False),
     Column("steps", Text, nullable=True), # JSON array
@@ -189,7 +189,7 @@ spells = Table(
     "spells",
     metadata,
     Column("id", String, primary_key=True),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=True),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=True, index=True),
     Column("template_id", String, ForeignKey("campaign_templates.id"), nullable=True),
     Column("name", String, nullable=False),
     Column("level", Integer, nullable=True),
@@ -202,7 +202,7 @@ monsters = Table(
     metadata,
     Column("id", String, primary_key=True),
     Column("template_id", String, ForeignKey("campaign_templates.id"), nullable=True),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=True),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=True, index=True),
     Column("name", String, nullable=False),
     Column("type", String, nullable=True),
     Column("cr", String, nullable=True),
@@ -214,7 +214,7 @@ items = Table(
     metadata,
     Column("id", String, primary_key=True),
     Column("template_id", String, ForeignKey("campaign_templates.id"), nullable=True),
-    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=True),
+    Column("campaign_id", String, ForeignKey("campaigns.id"), nullable=True, index=True),
     Column("name", String, nullable=False),
     Column("type", String, nullable=True),
     Column("data", Text, nullable=False)
