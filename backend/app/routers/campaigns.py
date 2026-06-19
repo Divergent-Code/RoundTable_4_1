@@ -36,8 +36,6 @@ async def test_api_key(
 
     try:
         api_key_to_use = req.api_key
-        if not api_key_to_use:
-             api_key_to_use = os.getenv("GEMINI_API_KEY")
 
         models = SystemService.validate_api_key(api_key_to_use, req.provider)
         return ModelListResponse(models=models)
@@ -92,7 +90,7 @@ async def list_campaigns(
                 status=row.status,
                 created_at=row.created_at,
                 api_key_verified=row.api_key_verified,
-                api_key_configured=bool(row.api_key or os.getenv("GEMINI_API_KEY"))
+                api_key_configured=bool(row.api_key)
             )
             for row in rows
         ]
@@ -114,8 +112,6 @@ async def create_campaign(
 
     # Resolve API Key
     api_key_to_use = req.api_key
-    if not api_key_to_use:
-        api_key_to_use = os.getenv("GEMINI_API_KEY")
 
     # Verify API Key if provided
     is_verified = False
@@ -368,7 +364,7 @@ async def update_campaign(
         created_at=row.created_at,
         api_key=None, # NEVER expose to frontend
         api_key_verified=row.api_key_verified,
-        api_key_configured=bool(row.api_key or os.getenv("GEMINI_API_KEY")),
+        api_key_configured=bool(row.api_key),
         model=row.model,
         system_prompt=row.system_prompt
     )
@@ -451,7 +447,7 @@ async def get_campaign(
         created_at=row.created_at,
         api_key=None, # NEVER expose to frontend
         api_key_verified=row.api_key_verified,
-        api_key_configured=bool(row.api_key or os.getenv("GEMINI_API_KEY")),
+        api_key_configured=bool(row.api_key),
         model=row.model,
         system_prompt=row.system_prompt,
         user_status=user_status,

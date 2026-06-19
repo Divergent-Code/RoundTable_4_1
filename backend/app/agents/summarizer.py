@@ -11,7 +11,7 @@ async def summarize_messages(messages: List[BaseMessage], api_key: str = None) -
     Summarizes a list of messages into a concise paragraph using a cheap model.
     """
     try:
-        final_api_key = api_key or os.getenv("GEMINI_API_KEY")
+        final_api_key = api_key
         if not final_api_key:
             return None
 

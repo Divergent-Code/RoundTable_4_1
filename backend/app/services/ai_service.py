@@ -16,23 +16,22 @@ logger = logging.getLogger(__name__)
 class AIService:
     @staticmethod
     async def get_campaign_config(campaign_id: str, db: AsyncSession):
-        import os
+        from fastapi import HTTPException
         result = await db.execute(text("SELECT api_key, model FROM campaigns WHERE id = :id"), {"id": campaign_id})
         row = result.mappings().fetchone()
 
-        fallback_key = os.getenv("GEMINI_API_KEY")
         fallback_model = "gemini-3-flash-preview"
 
         if row:
             api_key = row.get("api_key")
             if not api_key:
-                api_key = fallback_key
+                raise HTTPException(status_code=400, detail="No AI key configured for this campaign. Set your Gemini API key in Campaign Settings.")
             model = row.get("model")
             if not model:
                 model = fallback_model
             return (api_key, model)
 
-        return (fallback_key, fallback_model)
+        raise HTTPException(status_code=400, detail="No AI key configured for this campaign. Set your Gemini API key in Campaign Settings.")
 
     @staticmethod
     def _build_combat_narration_prompt(context: str, history: list, flags: list = None) -> list:

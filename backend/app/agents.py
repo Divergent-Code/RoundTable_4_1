@@ -40,7 +40,7 @@ def get_dm_graph(api_key: str = None, model_name: str = "gemini-3-flash-preview"
     global _dm_graph_cache
 
     # Check cache first
-    final_api_key = api_key or os.getenv("GEMINI_API_KEY")
+    final_api_key = api_key
     cache_key = (final_api_key, model_name)
 
     if cache_key in _dm_graph_cache:
@@ -208,7 +208,7 @@ def get_character_graph(api_key: str, model_name: str, character_details: dict, 
         from langchain_google_genai import ChatGoogleGenerativeAI
         from app.ai_tools import create_interact_tool
 
-        final_api_key = api_key or os.getenv("GEMINI_API_KEY")
+        final_api_key = api_key
         if not final_api_key:
             return None
 
@@ -283,7 +283,7 @@ async def summarize_messages(messages: List[BaseMessage], api_key: str = None) -
     Summarizes a list of messages into a concise paragraph using a cheap model.
     """
     try:
-        final_api_key = api_key or os.getenv("GEMINI_API_KEY")
+        final_api_key = api_key
         if not final_api_key:
             return None
 

@@ -15,7 +15,7 @@ _dm_graph_cache = {}
 
 def get_dm_graph(api_key: str = None, model_name: str = "gemini-3-flash-preview"):
     # Check cache first
-    final_api_key = api_key or os.getenv("GEMINI_API_KEY")
+    final_api_key = api_key
     cache_key = (final_api_key, model_name)
 
     if cache_key in _dm_graph_cache:

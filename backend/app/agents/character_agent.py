@@ -24,7 +24,7 @@ def get_character_graph(api_key: str, model_name: str, character_details: dict, 
         from langchain_google_genai import ChatGoogleGenerativeAI
         from app.ai_tools import create_interact_tool
 
-        final_api_key = api_key or os.getenv("GEMINI_API_KEY")
+        final_api_key = api_key
         if not final_api_key:
             return None
 
