@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React from 'react'
-import { render, act, renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { SocketProvider, useSocketContext } from '../lib/SocketProvider'
 import { useSocketStore } from '../lib/socket'
 import { io } from 'socket.io-client'
@@ -40,8 +40,8 @@ vi.mock('../store/authStore', () => ({
 
 describe('SocketProvider', () => {
   let mockSocket: any
-  let listeners: Record<string, Function[]> = {}
-  let ioListeners: Record<string, Function[]> = {}
+  let listeners: Record<string, ((...args: any[]) => void)[]> = {}
+  let ioListeners: Record<string, ((...args: any[]) => void)[]> = {}
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -51,23 +51,23 @@ describe('SocketProvider', () => {
     // Grab the mocked socket instance
     mockSocket = vi.mocked(io).mock.results[0]?.value || (io as any)()
 
-    mockSocket.on.mockImplementation((event: string, cb: Function) => {
+    mockSocket.on.mockImplementation((event: string, cb: (...args: any[]) => void) => {
       if (!listeners[event]) listeners[event] = []
       listeners[event].push(cb)
     })
 
-    mockSocket.once.mockImplementation((event: string, cb: Function) => {
+    mockSocket.once.mockImplementation((event: string, cb: (...args: any[]) => void) => {
       if (!listeners[event]) listeners[event] = []
       listeners[event].push(cb)
     })
 
-    mockSocket.off.mockImplementation((event: string, cb: Function) => {
+    mockSocket.off.mockImplementation((event: string, cb: (...args: any[]) => void) => {
       if (listeners[event]) {
         listeners[event] = listeners[event].filter((l) => l !== cb)
       }
     })
 
-    mockSocket.io.on.mockImplementation((event: string, cb: Function) => {
+    mockSocket.io.on.mockImplementation((event: string, cb: (...args: any[]) => void) => {
       if (!ioListeners[event]) ioListeners[event] = []
       ioListeners[event].push(cb)
     })

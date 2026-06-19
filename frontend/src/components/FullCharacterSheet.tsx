@@ -10,6 +10,8 @@ interface FullCharacterSheetProps {
 }
 
 export default function FullCharacterSheet({ character, isLoading = false, onClose }: FullCharacterSheetProps) {
+    const { socket } = useSocketContext();
+
     if (isLoading || !character) {
         return (
             <div className="w-full h-full bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden flex flex-col relative shadow-2xl animate-pulse">
@@ -103,7 +105,6 @@ export default function FullCharacterSheet({ character, isLoading = false, onClo
         );
     }
 
-    const { socket } = useSocketContext();
     const sheet = character.sheet_data || {};
     const stats = sheet.stats || {};
     const equipment = (sheet.equipment || []) as Item[];
