@@ -166,7 +166,7 @@ describe('SocketProvider', () => {
     expect(useSocketStore.getState().gameState).toEqual(mockState)
   })
 
-  it('applies patches incrementally with game_state_patch', async () => {
+  it('updates entity position via entity_moved delta event', async () => {
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <SocketProvider>{children}</SocketProvider>
     )
@@ -177,12 +177,13 @@ describe('SocketProvider', () => {
       triggerEvent('connect')
     })
 
+    // Set up a base state with one party member
     const baseState: any = {
       session_id: 'campaign-abc',
       turn_index: 0,
       phase: 'exploration',
       active_entity_id: null,
-      party: [{ id: 'p1', name: 'Adventurer', hp_current: 10, hp_max: 10, ac: 15, initiative: 0, speed: 30, position: { q: 0, r: 0, s: 0 }, inventory: [], conditions: [] }],
+      party: [{ id: 'player-1', name: 'Gimli', position: { q: 0, r: 0, s: 0 }, hp_current: 20, hp_max: 20, ac: 16, initiative: 0, speed: 30, inventory: [], conditions: [], is_ai: false }],
       enemies: [],
       npcs: [],
       turn_order: [],
@@ -193,20 +194,16 @@ describe('SocketProvider', () => {
       useSocketStore.getState().setGameState(baseState)
     })
 
-    // JSON patch to change hp_current of party member p1 to 5
-    const patch = [
-      { op: 'replace', path: '/party/0/hp_current', value: 5 }
-    ]
-
+    // Trigger the granular entity_moved event
     act(() => {
-      triggerEvent('game_state_patch', patch)
+      triggerEvent('entity_moved', { entity_id: 'player-1', q: 2, r: -1, s: -1 })
     })
 
     const updatedState = useSocketStore.getState().gameState
-    expect(updatedState?.party[0].hp_current).toBe(5)
+    expect(updatedState?.party[0].position).toEqual({ q: 2, r: -1, s: -1 })
   })
 
-  it('resyncs or reconnects on consecutive patch failures', async () => {
+  it('updates entity HP via hp_changed delta event', async () => {
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <SocketProvider>{children}</SocketProvider>
     )
@@ -220,10 +217,10 @@ describe('SocketProvider', () => {
     const baseState: any = {
       session_id: 'campaign-abc',
       turn_index: 0,
-      phase: 'exploration',
+      phase: 'combat',
       active_entity_id: null,
       party: [],
-      enemies: [],
+      enemies: [{ id: 'goblin-1', name: 'Goblin', hp_current: 10, hp_max: 10, ac: 12, initiative: 0, speed: 30, position: { q: 1, r: 0, s: -1 }, inventory: [], conditions: [], is_ai: true, type: 'Goblin', hostile: true }],
       npcs: [],
       turn_order: [],
       combat_log: [],
@@ -233,35 +230,56 @@ describe('SocketProvider', () => {
       useSocketStore.getState().setGameState(baseState)
     })
 
-    // Patch that fails (referencing non-existent index)
-    const badPatch = [
-      { op: 'replace', path: '/party/10/hp_current', value: 5 }
-    ]
-
-    // Strike 1
     act(() => {
-      triggerEvent('game_state_patch', badPatch)
-    })
-    expect(mockSocket.emit).toHaveBeenLastCalledWith('join_campaign', {
-      user_id: 'user-123',
-      campaign_id: 'campaign-abc',
+      triggerEvent('hp_changed', { entity_id: 'goblin-1', hp_current: 3, hp_max: 10 })
     })
 
-    // Strike 2
+    const updatedState = useSocketStore.getState().gameState
+    expect(updatedState?.enemies[0].hp_current).toBe(3)
+    expect(updatedState?.enemies[0].hp_max).toBe(10)
+  })
+
+  it('advances turn via turn_changed delta event', async () => {
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <SocketProvider>{children}</SocketProvider>
+    )
+    const { result } = renderHook(() => useSocketContext(), { wrapper })
+
     act(() => {
-      triggerEvent('game_state_patch', badPatch)
-    })
-    expect(mockSocket.emit).toHaveBeenLastCalledWith('join_campaign', {
-      user_id: 'user-123',
-      campaign_id: 'campaign-abc',
+      result.current.connect('campaign-abc')
+      triggerEvent('connect')
     })
 
-    // Strike 3 - triggers reconnect
+    const baseState: any = {
+      session_id: 'campaign-abc',
+      turn_index: 0,
+      phase: 'combat',
+      active_entity_id: 'player-1',
+      party: [],
+      enemies: [],
+      npcs: [],
+      turn_order: ['player-1', 'goblin-1'],
+      combat_log: [],
+    }
+
     act(() => {
-      triggerEvent('game_state_patch', badPatch)
+      useSocketStore.getState().setGameState(baseState)
     })
-    expect(mockSocket.disconnect).toHaveBeenCalled()
-    expect(mockSocket.connect).toHaveBeenCalled()
+
+    act(() => {
+      triggerEvent('turn_changed', {
+        turn_index: 1,
+        active_entity_id: 'goblin-1',
+        phase: 'combat',
+        turn_order: ['player-1', 'goblin-1'],
+        has_moved_this_turn: false,
+        has_acted_this_turn: false,
+      })
+    })
+
+    const updatedState = useSocketStore.getState().gameState
+    expect(updatedState?.turn_index).toBe(1)
+    expect(updatedState?.active_entity_id).toBe('goblin-1')
   })
 
   it('requests full state on socket reconnection event', async () => {

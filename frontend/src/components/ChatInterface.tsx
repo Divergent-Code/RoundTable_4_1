@@ -322,6 +322,7 @@ export default function ChatInterface({ characterId }: ChatInterfaceProps) {
                     />
                     <button
                         onClick={handleSend}
+                        aria-label="Send message"
                         disabled={!inputValue.trim() || (isDmTyping && inputValue.startsWith('@'))}
                         className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors disabled:opacity-50 disabled:bg-transparent disabled:text-neutral-600"
                     >

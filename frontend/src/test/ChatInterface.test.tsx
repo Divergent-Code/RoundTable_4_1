@@ -18,17 +18,19 @@ vi.mock('../lib/SocketProvider', () => {
 })
 
 vi.mock('../store/authStore', () => ({
-  useAuthStore: vi.fn().mockImplementation((selector) => {
+  useAuthStore: vi.fn().mockImplementation((selector?: (s: any) => any) => {
     const state = {
       profile: { id: 'player-1', username: 'Gimli' },
       user: { uid: 'user-123' },
     }
-    return selector(state)
+    // ChatInterface calls useAuthStore() with no selector and destructures the whole state.
+    // Other components call useAuthStore(selector). Handle both.
+    return typeof selector === 'function' ? selector(state) : state
   }),
 }))
 
 // Mock CommandSuggestions to isolate ChatInterface testing
-vi.mock('./CommandSuggestions', () => ({
+vi.mock('../components/CommandSuggestions', () => ({
   default: () => <div data-testid="command-suggestions" />
 }))
 
@@ -70,7 +72,7 @@ describe('ChatInterface', () => {
     render(<ChatInterface campaignId="campaign-abc" />)
 
     const input = screen.getByPlaceholderText(/What do you do\?/i) as HTMLInputElement
-    const sendButton = screen.getByRole('button')
+    const sendButton = screen.getByRole('button', { name: /send message/i })
 
     // Simulate typing
     fireEvent.change(input, { target: { value: 'Hello DM!' } })
