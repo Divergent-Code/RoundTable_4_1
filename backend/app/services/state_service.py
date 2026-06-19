@@ -54,17 +54,117 @@ class StateService:
 
     @staticmethod
     async def emit_state_update(campaign_id: str, game_state: 'GameState', sio):
-        import jsonpatch
         new_state_dict = game_state.model_dump()
         old_state_dict = StateService._last_broadcasted_state.get(campaign_id)
         
-        if old_state_dict:
-            patch = jsonpatch.make_patch(old_state_dict, new_state_dict)
-            if patch.patch: # Only emit if there are actual changes
-                await sio.emit('game_state_patch', patch.patch, room=campaign_id)
-        else:
+        if not old_state_dict:
             await sio.emit('game_state_update', new_state_dict, room=campaign_id)
+        else:
+            # 1. Compare Turn Variables
+            turn_keys = ["turn_index", "active_entity_id", "phase", "turn_order", "has_moved_this_turn", "has_acted_this_turn"]
+            turn_changed = False
+            for k in turn_keys:
+                if old_state_dict.get(k) != new_state_dict.get(k):
+                    turn_changed = True
+                    break
             
+            if turn_changed:
+                await sio.emit('turn_changed', {
+                    "turn_index": new_state_dict.get("turn_index", 0),
+                    "active_entity_id": new_state_dict.get("active_entity_id"),
+                    "phase": new_state_dict.get("phase", "exploration"),
+                    "turn_order": new_state_dict.get("turn_order", []),
+                    "has_moved_this_turn": new_state_dict.get("has_moved_this_turn", False),
+                    "has_acted_this_turn": new_state_dict.get("has_acted_this_turn", False)
+                }, room=campaign_id)
+
+            # 2. Compare Entities
+            old_entities = {}
+            for list_key in ["party", "enemies", "npcs"]:
+                for item in old_state_dict.get(list_key, []):
+                    if isinstance(item, dict) and "id" in item:
+                        old_entities[item["id"]] = item
+
+            new_entities = {}
+            for list_key in ["party", "enemies", "npcs"]:
+                for item in new_state_dict.get(list_key, []):
+                    if isinstance(item, dict) and "id" in item:
+                        new_entities[item["id"]] = item
+
+            # New entity added
+            for new_id, new_ent in new_entities.items():
+                if new_id not in old_entities:
+                    await sio.emit('entity_added', {"entity": new_ent}, room=campaign_id)
+                else:
+                    old_ent = old_entities[new_id]
+                    # Position
+                    old_pos = old_ent.get("position") or {}
+                    new_pos = new_ent.get("position") or {}
+                    if old_pos.get("q") != new_pos.get("q") or old_pos.get("r") != new_pos.get("r") or old_pos.get("s") != new_pos.get("s"):
+                        await sio.emit('entity_moved', {
+                            "entity_id": new_id,
+                            "q": new_pos.get("q", 0),
+                            "r": new_pos.get("r", 0),
+                            "s": new_pos.get("s", 0)
+                        }, room=campaign_id)
+                    # HP
+                    if old_ent.get("hp_current") != new_ent.get("hp_current") or old_ent.get("hp_max") != new_ent.get("hp_max"):
+                        await sio.emit('hp_changed', {
+                            "entity_id": new_id,
+                            "hp_current": new_ent.get("hp_current", 0),
+                            "hp_max": new_ent.get("hp_max", 10)
+                        }, room=campaign_id)
+                    # Conditions
+                    old_conds = {c["name"]: c for c in old_ent.get("conditions", []) if isinstance(c, dict) and "name" in c}
+                    new_conds = {c["name"]: c for c in new_ent.get("conditions", []) if isinstance(c, dict) and "name" in c}
+                    
+                    for c_name, c_val in new_conds.items():
+                        if c_name not in old_conds:
+                            await sio.emit('condition_applied', {"entity_id": new_id, "condition": c_val}, room=campaign_id)
+                        elif c_val.get("duration") != old_conds[c_name].get("duration"):
+                            await sio.emit('condition_applied', {"entity_id": new_id, "condition": c_val}, room=campaign_id)
+                    
+                    for c_name in old_conds:
+                        if c_name not in new_conds:
+                            await sio.emit('condition_removed', {"entity_id": new_id, "condition_name": c_name}, room=campaign_id)
+
+            # Entity removed
+            for old_id, old_ent in old_entities.items():
+                if old_id not in new_entities:
+                    await sio.emit('entity_removed', {"entity_id": old_id}, room=campaign_id)
+
+            # 3. Compare Vessels
+            old_vessels = {v["id"]: v for v in old_state_dict.get("vessels", []) if isinstance(v, dict) and "id" in v}
+            new_vessels = {v["id"]: v for v in new_state_dict.get("vessels", []) if isinstance(v, dict) and "id" in v}
+
+            for vid, vval in new_vessels.items():
+                if vid not in old_vessels:
+                    await sio.emit('vessel_added', {"vessel": vval}, room=campaign_id)
+                elif vval != old_vessels[vid]:
+                    await sio.emit('vessel_added', {"vessel": vval}, room=campaign_id)
+
+            for vid in old_vessels:
+                if vid not in new_vessels:
+                    await sio.emit('vessel_removed', {"vessel_id": vid}, room=campaign_id)
+
+            # 4. Compare Location
+            old_loc = old_state_dict.get("location") or {}
+            new_loc = new_state_dict.get("location") or {}
+            if old_loc.get("id") != new_loc.get("id") or len(old_loc.get("interactables", [])) != len(new_loc.get("interactables", [])):
+                await sio.emit('location_changed', new_loc, room=campaign_id)
+            else:
+                old_inter = {i["id"]: i for i in old_loc.get("interactables", []) if isinstance(i, dict) and "id" in i}
+                new_inter = {i["id"]: i for i in new_loc.get("interactables", []) if isinstance(i, dict) and "id" in i}
+                if old_inter != new_inter:
+                    await sio.emit('location_changed', new_loc, room=campaign_id)
+
+            # 5. Compare Combat Log
+            old_log = old_state_dict.get("combat_log") or []
+            new_log = new_state_dict.get("combat_log") or []
+            if len(new_log) > len(old_log):
+                new_entries = new_log[len(old_log):]
+                await sio.emit('combat_log_added', new_entries, room=campaign_id)
+
         StateService._last_broadcasted_state[campaign_id] = new_state_dict
 
     @staticmethod

@@ -122,6 +122,19 @@ interface SocketState {
     setAiTyping: (isTyping: boolean) => void;
     setAiStats: (stats: AIStats) => void;
 
+    // Targeted Sync Actions
+    entityMoved: (entityId: string, q: number, r: number, s: number) => void;
+    entityHpChanged: (entityId: string, hpCurrent: number, hpMax: number) => void;
+    entityConditionApplied: (entityId: string, condition: any) => void;
+    entityConditionRemoved: (entityId: string, conditionName: string) => void;
+    turnChanged: (turnIndex: number, activeEntityId: string | null, phase: 'combat' | 'exploration' | 'social', turnOrder: string[], hasMoved: boolean, hasActed: boolean) => void;
+    vesselAdded: (vessel: any) => void;
+    vesselRemoved: (vesselId: string) => void;
+    locationChanged: (location: any) => void;
+    combatLogAdded: (logs: any[]) => void;
+    entityAdded: (entity: any) => void;
+    entityRemoved: (entityId: string) => void;
+
     // UI Helpers that don't need socket
     setInitialStats: (totalTokens: number, inputTokens: number, outputTokens: number, queryCount: number, imageCount: number) => void;
 }
@@ -259,5 +272,171 @@ export const useSocketStore = create<SocketState>((set) => ({
                 queryCount
             }
         }));
-    }
+    },
+
+    entityMoved: (entityId, q, r, s) => set((state) => {
+        if (!state.gameState) return state;
+        const updateEntity = <T extends Entity>(list: T[]): T[] =>
+            list.map(e => e.id === entityId ? { ...e, position: { q, r, s } } : e);
+        return {
+            gameState: {
+                ...state.gameState,
+                party: updateEntity(state.gameState.party),
+                enemies: updateEntity(state.gameState.enemies),
+                npcs: updateEntity(state.gameState.npcs)
+            }
+        };
+    }),
+
+    entityHpChanged: (entityId, hpCurrent, hpMax) => set((state) => {
+        if (!state.gameState) return state;
+        const updateEntity = <T extends Entity>(list: T[]): T[] =>
+            list.map(e => e.id === entityId ? { ...e, hp_current: hpCurrent, hp_max: hpMax } : e);
+        return {
+            gameState: {
+                ...state.gameState,
+                party: updateEntity(state.gameState.party),
+                enemies: updateEntity(state.gameState.enemies),
+                npcs: updateEntity(state.gameState.npcs)
+            }
+        };
+    }),
+
+    entityConditionApplied: (entityId, condition) => set((state) => {
+        if (!state.gameState) return state;
+        const updateEntity = <T extends Entity>(list: T[]): T[] =>
+            list.map(e => {
+                if (e.id !== entityId) return e;
+                const exists = e.conditions.some(c => c.name === condition.name);
+                const newConds = exists 
+                    ? e.conditions.map(c => c.name === condition.name ? condition : c)
+                    : [...e.conditions, condition];
+                return { ...e, conditions: newConds };
+            });
+        return {
+            gameState: {
+                ...state.gameState,
+                party: updateEntity(state.gameState.party),
+                enemies: updateEntity(state.gameState.enemies),
+                npcs: updateEntity(state.gameState.npcs)
+            }
+        };
+    }),
+
+    entityConditionRemoved: (entityId, conditionName) => set((state) => {
+        if (!state.gameState) return state;
+        const updateEntity = <T extends Entity>(list: T[]): T[] =>
+            list.map(e => e.id === entityId 
+                ? { ...e, conditions: e.conditions.filter(c => c.name !== conditionName) } 
+                : e
+            );
+        return {
+            gameState: {
+                ...state.gameState,
+                party: updateEntity(state.gameState.party),
+                enemies: updateEntity(state.gameState.enemies),
+                npcs: updateEntity(state.gameState.npcs)
+            }
+        };
+    }),
+
+    turnChanged: (turnIndex, activeEntityId, phase, turnOrder, hasMoved, hasActed) => set((state) => {
+        if (!state.gameState) return state;
+        return {
+            gameState: {
+                ...state.gameState,
+                turn_index: turnIndex,
+                active_entity_id: activeEntityId,
+                phase,
+                turn_order: turnOrder,
+                has_moved_this_turn: hasMoved,
+                has_acted_this_turn: hasActed
+            }
+        };
+    }),
+
+    vesselAdded: (vessel) => set((state) => {
+        if (!state.gameState) return state;
+        const vessels = state.gameState.vessels || [];
+        const exists = vessels.some(v => v.id === vessel.id);
+        const newVessels = exists
+            ? vessels.map(v => v.id === vessel.id ? vessel : v)
+            : [...vessels, vessel];
+        return {
+            gameState: {
+                ...state.gameState,
+                vessels: newVessels
+            }
+        };
+    }),
+
+    vesselRemoved: (vesselId) => set((state) => {
+        if (!state.gameState) return state;
+        const vessels = state.gameState.vessels || [];
+        return {
+            gameState: {
+                ...state.gameState,
+                vessels: vessels.filter(v => v.id !== vesselId)
+            }
+        };
+    }),
+
+    locationChanged: (location) => set((state) => {
+        if (!state.gameState) return state;
+        return {
+            gameState: {
+                ...state.gameState,
+                location
+            }
+        };
+    }),
+
+    combatLogAdded: (logs) => set((state) => {
+        if (!state.gameState) return state;
+        return {
+            gameState: {
+                ...state.gameState,
+                combat_log: [...state.gameState.combat_log, ...logs]
+            }
+        };
+    }),
+
+    entityAdded: (entity) => set((state) => {
+        if (!state.gameState) return state;
+        const isPlayer = 'role' in entity && 'control_mode' in entity;
+        const isEnemy = 'hostile' in entity && 'type' in entity;
+        
+        let party = state.gameState.party;
+        let enemies = state.gameState.enemies;
+        let npcs = state.gameState.npcs;
+        
+        if (isPlayer) {
+            if (!party.some(p => p.id === entity.id)) party = [...party, entity];
+        } else if (isEnemy) {
+            if (!enemies.some(e => e.id === entity.id)) enemies = [...enemies, entity];
+        } else {
+            if (!npcs.some(n => n.id === entity.id)) npcs = [...npcs, entity];
+        }
+        
+        return {
+            gameState: {
+                ...state.gameState,
+                party,
+                enemies,
+                npcs
+            }
+        };
+    }),
+
+    entityRemoved: (entityId) => set((state) => {
+        if (!state.gameState) return state;
+        return {
+            gameState: {
+                ...state.gameState,
+                party: state.gameState.party.filter(p => p.id !== entityId),
+                enemies: state.gameState.enemies.filter(e => e.id !== entityId),
+                npcs: state.gameState.npcs.filter(n => n.id !== entityId)
+            }
+        };
+    })
 }));

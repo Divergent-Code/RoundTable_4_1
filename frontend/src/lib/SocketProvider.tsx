@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { applyPatch } from 'fast-json-patch';
+// import { applyPatch } from 'fast-json-patch';
 import { useAuthStore } from '../store/authStore';
 import { useSocketStore } from './socket';
 
@@ -129,6 +129,59 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                     useSocketStore.getState().setGameState(state);
                 });
 
+                // Granular Socket.IO Delta Listeners
+                newSocket.on('entity_moved', ({ entity_id, q, r, s }) => {
+                    useSocketStore.getState().entityMoved(entity_id, q, r, s);
+                });
+
+                newSocket.on('hp_changed', ({ entity_id, hp_current, hp_max }) => {
+                    useSocketStore.getState().entityHpChanged(entity_id, hp_current, hp_max);
+                });
+
+                newSocket.on('condition_applied', ({ entity_id, condition }) => {
+                    useSocketStore.getState().entityConditionApplied(entity_id, condition);
+                });
+
+                newSocket.on('condition_removed', ({ entity_id, condition_name }) => {
+                    useSocketStore.getState().entityConditionRemoved(entity_id, condition_name);
+                });
+
+                newSocket.on('turn_changed', (turnData) => {
+                    useSocketStore.getState().turnChanged(
+                        turnData.turn_index,
+                        turnData.active_entity_id,
+                        turnData.phase,
+                        turnData.turn_order,
+                        turnData.has_moved_this_turn,
+                        turnData.has_acted_this_turn
+                    );
+                });
+
+                newSocket.on('vessel_added', ({ vessel }) => {
+                    useSocketStore.getState().vesselAdded(vessel);
+                });
+
+                newSocket.on('vessel_removed', ({ vessel_id }) => {
+                    useSocketStore.getState().vesselRemoved(vessel_id);
+                });
+
+                newSocket.on('location_changed', (location) => {
+                    useSocketStore.getState().locationChanged(location);
+                });
+
+                newSocket.on('combat_log_added', (logs) => {
+                    useSocketStore.getState().combatLogAdded(logs);
+                });
+
+                newSocket.on('entity_added', ({ entity }) => {
+                    useSocketStore.getState().entityAdded(entity);
+                });
+
+                newSocket.on('entity_removed', ({ entity_id }) => {
+                    useSocketStore.getState().entityRemoved(entity_id);
+                });
+
+                /* Deprecated: game_state_patch is replaced by granular delta events
                 newSocket.on('game_state_patch', (patch) => {
                     const state = useSocketStore.getState().gameState;
                     if (state) {
@@ -160,6 +213,7 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                         console.warn("Received patch but no base game state exists yet.");
                     }
                 });
+                */
 
                 // On reconnect, request fresh full state
                 newSocket.io.on('reconnect', () => {
