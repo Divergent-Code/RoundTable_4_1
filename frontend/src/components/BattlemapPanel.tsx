@@ -175,6 +175,7 @@ export default function BattlemapPanel() {
     const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
     const [plottedPath, setPlottedPath] = useState<{ q: number, r: number, s: number }[]>([]);
     const [animatingPaths, setAnimatingPaths] = useState<Record<string, { q: number, r: number, s: number }[]>>({});
+    const [reachablePathsMap, setReachablePathsMap] = useState<Record<string, { q: number, r: number, s: number }[]>>({});
 
     // Listen for path animations from backend (ensuring synced movement for all players/AI)
     useEffect(() => {
@@ -190,53 +191,42 @@ export default function BattlemapPanel() {
         };
     }, [socket]);
 
+    // Fetch reachable hex paths from backend when selection or turn changes
+    useEffect(() => {
+        if (!selectedTokenId || !socket) {
+            setReachablePathsMap({});
+            return;
+        }
+
+        socket.emit('get_reachable_hexes', { entity_id: selectedTokenId }, (response: any) => {
+            if (response && response.paths) {
+                setReachablePathsMap(response.paths);
+            } else {
+                setReachablePathsMap({});
+            }
+        });
+    }, [selectedTokenId, gameState?.turn_index, socket]);
+
     const handleHexHover = (hex: { q: number, r: number, s: number }) => {
         if (!selectedTokenId) return;
-        const token = [...party, ...enemies, ...npcs].find(e => e.id === selectedTokenId);
-        if (!token) return;
-
-        const pathIdx = plottedPath.findIndex(p => p.q === hex.q && p.r === hex.r);
-
-        if (pathIdx !== -1) {
-            setPlottedPath(prev => prev.slice(0, pathIdx + 1));
-            return;
-        }
-
-        if (hex.q === token.position.q && hex.r === token.position.r) {
+        const key = `${hex.q},${hex.r},${hex.s}`;
+        if (reachablePathsMap[key]) {
+            setPlottedPath(reachablePathsMap[key]);
+        } else {
             setPlottedPath([]);
-            return;
-        }
-
-        const tip = plottedPath.length > 0 ? plottedPath[plottedPath.length - 1] : token.position;
-        const dist = getHexDistance(tip.q, tip.r, tip.s, hex.q, hex.r, hex.s);
-
-        if (dist === 1) {
-            const maxHexDistance = Math.floor((token.speed || 30) / 5);
-            if (plottedPath.length < maxHexDistance) {
-                const isEnemyOrNPC = [...enemies, ...npcs].some(e => e.position && e.position.q === hex.q && e.position.r === hex.r && (e.hp_current === undefined || e.hp_current > 0));
-                if (!isEnemyOrNPC) {
-                    setPlottedPath(prev => [...prev, hex]);
-                }
-            }
         }
     };
 
     const handleHexClick = (hex: { q: number, r: number, s: number }, isReachable: boolean) => {
         if (!selectedTokenId || !socket || !isReachable) return;
 
-        const pathTarget = plottedPath.length > 0 ? plottedPath[plottedPath.length - 1] : null;
-        const matchesPathTarget = pathTarget && pathTarget.q === hex.q && pathTarget.r === hex.r;
-
-        let finalPath = [];
-        if (matchesPathTarget) {
-            finalPath = [...plottedPath];
-        } else {
-            finalPath = [hex];
-        }
+        const key = `${hex.q},${hex.r},${hex.s}`;
+        const finalPath = reachablePathsMap[key] || [];
 
         const emitId = selectedTokenId;
         setSelectedTokenId(null);
         setPlottedPath([]);
+        setReachablePathsMap({});
 
         socket.emit('move_entity', {
             entity_id: emitId,
@@ -259,73 +249,16 @@ export default function BattlemapPanel() {
         return pts.join(" ");
     }, [plottedPath, selectedTokenId, party, enemies, npcs]);
 
-    // Derived state for reachable hexes (Shrinks as path is plotted)
+    // Derived state for reachable hexes
     const reachableHexes = useMemo(() => {
-        if (!selectedTokenId || !gameState?.location?.walkable_hexes) return new Set<string>();
-
-        const token = [...party, ...enemies, ...npcs].find(e => e.id === selectedTokenId);
-        if (!token || token.speed === undefined || !token.position) return new Set<string>();
-
-        const isPartyMember = party.some(p => p.id === selectedTokenId);
-        if (!isPartyMember) return new Set<string>();
-
-        const maxMoves = Math.floor(token.speed / 5);
-        const remainingMoves = maxMoves - plottedPath.length;
-
-        const reachable = new Set<string>();
-
-        // Add the path itself and origin so they stay highlighted (to allow clicking backwards)
-        reachable.add(`${token.position.q},${token.position.r}`);
-        plottedPath.forEach(p => reachable.add(`${p.q},${p.r}`));
-
-        if (remainingMoves <= 0) return reachable;
-
-        // Only enemies and NPCs block movement paths (allies can be moved through, but not ended on)
-        const obstacleHexes = new Set(
-            [...enemies.filter(e => e.hp_current > 0), ...npcs]
-                .map(e => `${e.position.q},${e.position.r}`)
-        );
-
-        const alliedHexes = new Set(
-            party.map(p => `${p.position.q},${p.position.r}`)
-        );
-
-        // Set of hexes we have already stepped on in this path
-        const pathSet = new Set(plottedPath.map(p => `${p.q},${p.r}`));
-        pathSet.add(`${token.position.q},${token.position.r}`);
-
-        const walkableSet = new Set(gameState.location.walkable_hexes.map(h => `${h.q},${h.r}`));
-        const startPos = plottedPath.length > 0 ? plottedPath[plottedPath.length - 1] : token.position;
-
-        // BFS to find all hexes reachable within remainingMoves
-        const visited = new Set<string>();
-        const queue: { q: number, r: number, s: number, dist: number }[] = [{ ...startPos, dist: 0 }];
-        visited.add(`${startPos.q},${startPos.r}`);
-
-        while (queue.length > 0) {
-            const current = queue.shift()!;
-
-            // Reached max distance for this tip
-            if (current.dist >= remainingMoves) continue;
-
-            const neighbors = getHexNeighbors(current.q, current.r, current.s);
-            for (const n of neighbors) {
-                const key = `${n.q},${n.r}`;
-                if (walkableSet.has(key) && !visited.has(key) && !pathSet.has(key) && !obstacleHexes.has(key)) {
-                    visited.add(key);
-                    reachable.add(key);
-                    queue.push({ ...n, dist: current.dist + 1 });
-                }
-            }
-        }
-
-        // Cannot end your turn on an ally's hex
-        for (const alliedHex of alliedHexes) {
-            reachable.delete(alliedHex);
-        }
-
-        return reachable;
-    }, [selectedTokenId, gameState?.location?.walkable_hexes, party, enemies, npcs, gameState?.phase, plottedPath]);
+        const keys = Object.keys(reachablePathsMap);
+        const set = new Set<string>();
+        keys.forEach(k => {
+            const [q, r] = k.split(',');
+            set.add(`${q},${r}`);
+        });
+        return set;
+    }, [reachablePathsMap]);
 
     // Calculate rendering offsets for tokens that share the same hex
     const allEntities = useMemo(() => {

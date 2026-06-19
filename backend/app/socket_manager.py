@@ -71,3 +71,7 @@ async def clear_debug_logs(sid):
 @sio.event
 async def move_entity(sid, data):
     await exploration.handle_move_entity(sid, data, sio, connected_users)
+
+@sio.event
+async def get_reachable_hexes(sid, data):
+    return await exploration.handle_get_reachable_hexes(sid, data, sio, connected_users)

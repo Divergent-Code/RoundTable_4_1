@@ -137,3 +137,77 @@ async def handle_move_entity(sid, data, sio, connected_users):
         await sio.emit('system_message', {'content': '🚫 Server is busy processing another request. Please try your movement again.'}, room=sid)
     except Exception as e:
         logger.error(f"[Move] Error handling move_entity: {e}", exc_info=True)
+
+@socket_event_handler
+async def handle_get_reachable_hexes(sid, data, sio, connected_users):
+    if sid not in connected_users:
+        return {"entity_id": None, "paths": {}}
+
+    user_data = connected_users[sid]
+    campaign_id = user_data['campaign_id']
+
+    entity_id = data.get('entity_id')
+    if not entity_id:
+        return {"entity_id": None, "paths": {}}
+
+    try:
+        async with AsyncSessionLocal() as db:
+            game_state = await StateService.get_game_state(campaign_id, db)
+            if not game_state:
+                return {"entity_id": entity_id, "paths": {}}
+
+            # Find entity
+            entity = None
+            for p in game_state.party + game_state.enemies + game_state.npcs:
+                if p.id == entity_id:
+                    entity = p
+                    break
+
+            if not entity or getattr(entity, 'position', None) is None:
+                return {"entity_id": entity_id, "paths": {}}
+
+            # Calculate remaining moves
+            max_move = int(getattr(entity, 'speed', 30) // 5)
+            
+            # Check condition restrictions (Grappled, Restrained)
+            from app.services.condition_service import has_speed_zero
+            if has_speed_zero(entity):
+                max_move = 0
+
+            # Identify obstacle hexes (all other living entities)
+            obstacle_hexes = set()
+            for loop_entity in game_state.party + [e for e in game_state.enemies if e.hp_current > 0] + game_state.npcs:
+                if loop_entity.id != entity.id and loop_entity.position is not None:
+                    obstacle_hexes.add((loop_entity.position.q, loop_entity.position.r, loop_entity.position.s))
+
+            from app.services.pathfinding_service import PathfindingService
+            start_hex = (entity.position.q, entity.position.r, entity.position.s)
+            
+            paths_dict = PathfindingService.find_reachable_hexes(
+                start_hex,
+                max_move,
+                game_state.location.walkable_hexes,
+                obstacle_hexes
+            )
+
+            # Format the output paths to JSON-serializable keys (e.g. "q,r,s")
+            serializable_paths = {}
+            for target_hex, path in paths_dict.items():
+                if target_hex == start_hex:
+                    continue
+                # Cannot end turn on an ally's hex
+                is_occupied = False
+                for p in game_state.party:
+                    if p.id != entity.id and p.position is not None:
+                        if p.position.q == target_hex[0] and p.position.r == target_hex[1]:
+                            is_occupied = True
+                            break
+                if not is_occupied:
+                    key = f"{target_hex[0]},{target_hex[1]},{target_hex[2]}"
+                    serializable_paths[key] = [{"q": h[0], "r": h[1], "s": h[2]} for h in path]
+
+            return {"entity_id": entity_id, "paths": serializable_paths}
+            
+    except Exception as e:
+        logger.error(f"[Reachable] Error in get_reachable_hexes: {e}", exc_info=True)
+        return {"entity_id": entity_id, "paths": {}}

@@ -28,6 +28,11 @@ class GameEngine:
         if not target:
             return {"success": False, "message": "No target specified."}
 
+        # 1. Condition checks for incapacitation / skipped turn
+        from app.services.condition_service import get_attack_modifiers, should_skip_turn, get_active_effects, has_damage_resistance
+        if should_skip_turn(actor):
+            return {"success": False, "message": f"{actor.name} is incapacitated and cannot attack."}
+
         # Determine weapon and stats
         weapon_name = params.get("weapon_name", "Unarmed Strike")
         damage_dice = params.get("weapon_damage_dice", "1d4")
@@ -54,10 +59,52 @@ class GameEngine:
             if "ranged" in w_type:
                 is_ranged = True
 
+        is_melee_weapon = not is_ranged
+        atk_mods = get_attack_modifiers(actor, target, is_melee=is_melee_weapon)
+        if atk_mods.get("blocked"):
+            return {"success": False, "message": atk_mods["reason"]}
+
+        # Range Limit Check
+        max_range = params.get("max_range")
+        if max_range is None:
+            max_range = 1  # Default touch/melee
+            if is_ranged and weapon:
+                weapon_data = weapon.get("data") or {}
+                range_data = weapon_data.get("range", {})
+                if isinstance(range_data, dict):
+                    normal_range_ft = range_data.get("normal", 120)
+                    if isinstance(normal_range_ft, (int, float)):
+                        max_range = max(1, int(normal_range_ft) // 5)
+                else:
+                    max_range = 24  # Fallback 120ft
+
+        distance = params.get("distance")
+        if distance is None:
+            if actor.position and target.position:
+                distance = actor.position.distance_to(target.position)
+            else:
+                distance = 1  # Fallback if no coordinates available
+
+        if distance > max_range:
+            return {
+                "success": False,
+                "message": f"**{actor.name}** tries to attack **{target.name}**, but is too far away. (Range: {max_range} hexes)!"
+            }
+
+        # Line of Sight Check
+        walkable_hexes = params.get("walkable_hexes")
+        if walkable_hexes and actor.position and target.position:
+            from app.services.pathfinding_service import PathfindingService
+            if not PathfindingService.check_line_of_sight(actor.position, target.position, walkable_hexes):
+                return {
+                    "success": False,
+                    "message": f"**{actor.name}** cannot target **{target.name}** because they do not have Line of Sight!"
+                }
+
+        # Determine attack modifier
         str_mod = actor.get_mod("strength")
         dex_mod = actor.get_mod("dexterity")
 
-        # Determine attack modifier
         if is_ranged:
             hit_mod = dex_mod
         elif is_finesse:
@@ -66,9 +113,14 @@ class GameEngine:
             hit_mod = str_mod
 
         # 1. Roll to Hit (with advantage/disadvantage from conditions)
-        has_advantage = params.get("advantage", False)
-        has_disadvantage = params.get("disadvantage", False)
-        auto_crit = params.get("melee_auto_crit", False) and not is_ranged
+        has_advantage = params.get("advantage", False) or atk_mods.get("advantage", False)
+        has_disadvantage = params.get("disadvantage", False) or atk_mods.get("disadvantage", False)
+
+        target_effects = get_active_effects(target)
+        auto_crit = (params.get("melee_auto_crit", False) or ("melee_auto_crit" in target_effects)) and not is_ranged
+
+        if has_damage_resistance(target):
+            params["damage_resistance"] = True
 
         if has_advantage and not has_disadvantage:
             roll = Dice.roll("1d20 adv")
@@ -179,6 +231,56 @@ class GameEngine:
             spell_name = spell_data.get("name", "Unknown Spell")
             s_data = spell_data.get("data", {})
 
+        # 1. Skip turn / Incapacitated check
+        from app.services.condition_service import should_skip_turn
+        if should_skip_turn(actor):
+            return {"success": False, "message": f"{actor.name} is incapacitated and cannot cast spells."}
+
+        # 2. Spell Range & LOS check
+        if target:
+            spell_range_str = s_data.get('range', 'Touch').lower()
+            max_hexes = 1  # Default touch/melee
+
+            if 'feet' in spell_range_str or 'ft' in spell_range_str:
+                import re
+                nums = re.findall(r'\d+', spell_range_str)
+                if nums:
+                    max_hexes = max(1, int(nums[0]) // 5)
+            elif 'mile' in spell_range_str:
+                max_hexes = 100
+            elif 'self' in spell_range_str:
+                max_hexes = 0
+
+            # Allow params override
+            if "max_range" in params:
+                max_hexes = params["max_range"]
+
+            if "distance" in params:
+                dist = params["distance"]
+            elif actor.position and target.position:
+                dist = actor.position.distance_to(target.position)
+            else:
+                dist = 1  # fallback
+
+            if dist > max_hexes:
+                return {"success": False, "message": f"**{actor.name}** tries to cast **{spell_name}** at **{target.name}**, but they are out of range ({max_hexes} hexes max)!"}
+
+            # LOS check
+            walkable_hexes = params.get("walkable_hexes")
+            if walkable_hexes and actor.position and target.position:
+                from app.services.pathfinding_service import PathfindingService
+                if not PathfindingService.check_line_of_sight(actor.position, target.position, walkable_hexes):
+                    return {
+                        "success": False,
+                        "message": f"**{actor.name}** cannot cast **{spell_name}** at **{target.name}** because they do not have Line of Sight!"
+                    }
+
+        # Pre-calculate target damage resistance
+        damage_resistant = params.get("damage_resistance", False)
+        if target:
+            from app.services.condition_service import has_damage_resistance
+            damage_resistant = damage_resistant or has_damage_resistance(target)
+
         # Default results structure
         result_data = {
             "success": True,
@@ -238,8 +340,12 @@ class GameEngine:
         # ----------------
         if requires_attack_roll and target:
             result_data["message"] += f"\n*Spell Attack Roll:* "
-            has_adv = params.get("advantage", False)
-            has_dis = params.get("disadvantage", False)
+            from app.services.condition_service import get_attack_modifiers
+            atk_mods = get_attack_modifiers(actor, target, is_melee=False)
+            if atk_mods.get("blocked"):
+                return {"success": False, "message": atk_mods["reason"]}
+            has_adv = params.get("advantage", False) or atk_mods.get("advantage", False)
+            has_dis = params.get("disadvantage", False) or atk_mods.get("disadvantage", False)
             if has_adv and not has_dis:
                 roll = Dice.roll("1d20 adv")
             elif has_dis and not has_adv:
@@ -265,7 +371,7 @@ class GameEngine:
                         detail += f" + {crit_roll['detail']} [CRIT]"
                         result_data["message"] += " **CRITICAL HIT!**"
 
-                    if params.get("damage_resistance"):
+                    if damage_resistant:
                         dmg = dmg // 2
                         detail += " [HALVED - RESISTANT]"
 
@@ -289,8 +395,10 @@ class GameEngine:
             result_data["message"] += f"\n*Saving Throw (DC {spell_save_dc} {dc_stat.upper()}):* "
 
             # Check condition-based save modifiers (auto-fail, disadvantage)
-            save_auto_fail = params.get("save_auto_fail", False)
-            save_disadvantage = params.get("save_disadvantage", False)
+            from app.services.condition_service import get_save_modifiers
+            save_mods = get_save_modifiers(target, dc_stat)
+            save_auto_fail = params.get("save_auto_fail", False) or save_mods.get("auto_fail", False)
+            save_disadvantage = params.get("save_disadvantage", False) or save_mods.get("disadvantage", False)
 
             if save_auto_fail:
                 roll = {"total": 1, "detail": "1 [AUTO-FAIL]"}
@@ -322,7 +430,7 @@ class GameEngine:
                     dmg = dmg // 2
                     result_data["message"] += " (Half damage)."
 
-                if params.get("damage_resistance"):
+                if damage_resistant:
                     dmg = dmg // 2
                     detail += " [HALVED - RESISTANT]"
 
@@ -368,7 +476,7 @@ class GameEngine:
         elif damage_dice and target:
              dmg_roll = Dice.roll(damage_dice)
              dmg = dmg_roll["total"]
-             if params.get("damage_resistance"):
+             if damage_resistant:
                  dmg = dmg // 2
              target.take_damage(dmg)
              result_data["damage_total"] = dmg

@@ -1,22 +1,64 @@
 import math
-from typing import Optional
+from typing import Optional, List
 
 class CharacterSheet:
     def __init__(self, data: dict):
-        self.data = data
+        self.data = data or {}
 
         # Stats could be top-level (primitive dict) or inside sheet_data (model dump)
-        self.stats = data.get("stats", {})
-        if not self.stats and "sheet_data" in data and isinstance(data["sheet_data"], dict):
-            self.stats = data["sheet_data"].get("stats", {})
+        self.stats = self.data.get("stats", {})
+        if not self.stats and "sheet_data" in self.data and isinstance(self.data["sheet_data"], dict):
+            self.stats = self.data["sheet_data"].get("stats", {})
 
         # Support flat structure (Pydantic model dump) vs nested structure
-        if "hp_current" in data:
-             self.hp = {"current": int(data["hp_current"]), "max": int(data.get("hp_max", 10))}
+        if "hp_current" in self.data:
+             self.hp = {"current": int(self.data["hp_current"]), "max": int(self.data.get("hp_max", 10))}
         else:
-             self.hp = data.get("hp", {"current": 10, "max": 10})
+             self.hp = self.data.get("hp", {"current": 10, "max": 10})
 
-        self.name = data.get("name", "Unknown")
+        self.name = self.data.get("name", "Unknown")
+
+    @property
+    def id(self) -> Optional[str]:
+        return self.data.get("id")
+
+    @property
+    def position(self):
+        pos = self.data.get("position")
+        if pos:
+            from app.models import Coordinates
+            if isinstance(pos, dict):
+                return Coordinates(**pos)
+            return pos
+        return None
+
+    @property
+    def conditions(self) -> list:
+        conds = self.data.get("conditions", [])
+        if not conds and "data" in self.data and isinstance(self.data["data"], dict):
+            conds = self.data["data"].get("conditions", [])
+        from app.models import Condition
+        return [Condition(**c) if isinstance(c, dict) else c for c in conds]
+
+    @property
+    def role(self) -> str:
+        return self.data.get("role") or self.data.get("type") or "Fighter"
+
+    @property
+    def level(self) -> int:
+        lvl = self.data.get("level", 1)
+        try: return int(lvl)
+        except: return 1
+
+    @property
+    def xp(self) -> int:
+        xp_val = self.data.get("xp", 0)
+        try: return int(xp_val)
+        except: return 0
+
+    @property
+    def user_id(self) -> Optional[str]:
+        return self.data.get("user_id")
 
     def get_mod(self, stat: str) -> int:
         score = next((v for k, v in self.stats.items() if str(k).lower() == stat.lower()), 10)

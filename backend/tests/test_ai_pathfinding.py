@@ -59,3 +59,42 @@ async def test_ai_pathfinding():
         import traceback
         print("EXCEPTION RAISED:")
         print(traceback.format_exc())
+
+@pytest.mark.asyncio
+async def test_get_reachable_hexes_event():
+    from app.socket.handlers.exploration import handle_get_reachable_hexes
+    from app.services.state_service import StateService
+    from unittest.mock import patch, AsyncMock
+
+    p1 = Player(
+        id="player1", name="Alice", user_id="u1", hp_current=20, hp_max=20, ac=12,
+        position=Coordinates(q=0, r=0, s=0), role="Fighter", is_ai=False
+    )
+    walkable = [
+        Coordinates(q=0, r=0, s=0),
+        Coordinates(q=1, r=0, s=-1),
+        Coordinates(q=2, r=0, s=-2),
+        Coordinates(q=3, r=0, s=-3)
+    ]
+    gs = GameState(
+        session_id="test_campaign",
+        location=Location(name="Cave", description="A cave", walkable_hexes=walkable),
+        party=[p1]
+    )
+
+    connected_users = {
+        "test_sid": {"campaign_id": "test_campaign", "user_id": "u1"}
+    }
+
+    with patch.object(StateService, "get_game_state", return_value=gs):
+        res = await handle_get_reachable_hexes(
+            sid="test_sid",
+            data={"entity_id": "player1"},
+            sio=AsyncMock(),
+            connected_users=connected_users
+        )
+
+        assert res["entity_id"] == "player1"
+        assert "1,0,-1" in res["paths"]
+        assert len(res["paths"]["1,0,-1"]) == 1
+        assert res["paths"]["1,0,-1"][0] == {"q": 1, "r": 0, "s": -1}

@@ -162,16 +162,6 @@ class CombatService:
             for n in game_state.enemies: print(f"DEBUG: ENEMY: {n.name}")
             return {"success": False, "message": f"Could not find actor '{attacker_name}' or target '{target_name}'."}
 
-        # Check conditions for advantage/disadvantage and damage resistance
-        from app.services.condition_service import get_attack_modifiers, should_skip_turn, has_damage_resistance
-        if should_skip_turn(actor_char):
-            return {"success": False, "message": f"{actor_char.name} is incapacitated and cannot attack."}
-
-        is_melee = True  # will be refined per-weapon below
-        atk_mods = get_attack_modifiers(actor_char, target_char, is_melee=is_melee)
-        if atk_mods.get("blocked"):
-            return {"success": False, "message": atk_mods["reason"]}
-
         # Engine Resolution
         engine = GameEngine()
         actor_data = actor_char.model_dump() if hasattr(actor_char, 'model_dump') else actor_char.dict()
@@ -215,41 +205,11 @@ class CombatService:
                 if idx > 0:
                     params['is_offhand'] = True
 
-            # Range Limit Check
-            dist = actor_char.position.distance_to(target_char.position)
-            is_ranged_attack = params.get('is_ranged', False)
-            
-            max_hex_range = 1
-            if is_ranged_attack and weapon_data and 'data' in weapon_data:
-                range_data = weapon_data['data'].get('range', {})
-                if isinstance(range_data, dict):
-                    normal_range_ft = range_data.get('normal', 120)
-                    if isinstance(normal_range_ft, (int, float)):
-                        max_hex_range = max(1, int(normal_range_ft) // 5)
-                else:
-                    max_hex_range = 24 # Fallback 120ft
-
-            if dist > max_hex_range:
-                action_results.append({
-                    "success": False,
-                    "message": f"**{actor_char.name}** tries to attack **{target_char.name}**, but is too far away. (Range: {max_hex_range} hexes)!"
-                })
-                continue
-
-            # Condition-based advantage/disadvantage (re-check per weapon for melee vs ranged)
-            is_melee_weapon = not params.get('is_ranged', False)
-            atk_mods = get_attack_modifiers(actor_char, target_char, is_melee=is_melee_weapon)
-            if atk_mods["advantage"]:
-                params["advantage"] = True
-            if atk_mods["disadvantage"]:
-                params["disadvantage"] = True
-            # Paralyzed/Unconscious targets: melee hits are auto-crits
-            from app.services.condition_service import get_active_effects
-            target_effects = get_active_effects(target_char)
-            if "melee_auto_crit" in target_effects and is_melee_weapon:
-                params["melee_auto_crit"] = True
-            if has_damage_resistance(target_char):
-                params["damage_resistance"] = True
+            # Inject distance and walkable hexes for range/LOS checks
+            if actor_char.position and target_char.position:
+                params["distance"] = actor_char.position.distance_to(target_char.position)
+            if game_state.location and game_state.location.walkable_hexes:
+                params["walkable_hexes"] = game_state.location.walkable_hexes
 
             # Run synchronous engine logic for this attack
             res = await loop.run_in_executor(
@@ -263,13 +223,18 @@ class CombatService:
                     params
                 )
             )
+
+            if not res.get("success"):
+                action_results.append(res)
+                break
+
             res['weapon_name'] = params.get('weapon_name')
             res['is_ranged'] = params.get('is_ranged', False)
             res['is_finesse'] = params.get('is_finesse', False)
             action_results.append(res)
 
             # Stop if target is dead before subsequent attacks
-            if res.get("success") and res.get("target_hp_remaining", getattr(target_char, 'hp_current', 0)) <= 0:
+            if res.get("target_hp_remaining", getattr(target_char, 'hp_current', 0)) <= 0:
                 break
 
         # Aggregate results
@@ -405,29 +370,6 @@ class CombatService:
             if not target_char:
                 return {"success": False, "message": f"Could not find target '{target_name}'."}
 
-            # Range check — read from normalized spell data
-            dist = actor_char.position.distance_to(target_char.position)
-            spell_range_str = matched_spell.get('data', {}).get('range', 'Touch').lower()
-            max_hexes = 1  # Default touch/melee
-
-            if 'feet' in spell_range_str or 'ft' in spell_range_str:
-                nums = re.findall(r'\d+', spell_range_str)
-                if nums:
-                    max_hexes = max(1, int(nums[0]) // 5)
-            elif 'mile' in spell_range_str:
-                max_hexes = 100
-            elif 'self' in spell_range_str:
-                max_hexes = 0
-
-            if dist > max_hexes:
-                return {"success": False, "message": f"**{actor_char.name}** tries to cast **{spell_name}** at **{target_char.name}**, but they are out of range ({max_hexes} hexes max)!"}
-
-        # Condition checks for spell casting
-        from app.services.condition_service import get_attack_modifiers, get_save_modifiers, should_skip_turn
-
-        if should_skip_turn(actor_char):
-            return {"success": False, "message": f"{actor_char.name} is incapacitated and cannot cast spells."}
-
         # Engine Resolution
         engine = GameEngine()
         actor_data = actor_char.model_dump() if hasattr(actor_char, 'model_dump') else actor_char.dict()
@@ -437,29 +379,12 @@ class CombatService:
             "spell_data": matched_spell
         }
 
-        # Inject condition-based modifiers for spell attacks and saves
+        # Inject distance and walkable hexes for range/LOS checks
         if target_char:
-            spell_data = matched_spell.get("data", {})
-            # For spell attack rolls: attacker advantage/disadvantage
-            if spell_data.get("attack_type"):
-                atk_mods = get_attack_modifiers(actor_char, target_char, is_melee=False)
-                if atk_mods.get("blocked"):
-                    return {"success": False, "message": atk_mods["reason"]}
-                if atk_mods["advantage"]:
-                    params["advantage"] = True
-                if atk_mods["disadvantage"]:
-                    params["disadvantage"] = True
-            # For saves: target auto-fail or disadvantage
-            if spell_data.get("save"):
-                save_stat = spell_data["save"].get("dc_type", {}).get("index", "dexterity")
-                save_mods = get_save_modifiers(target_char, save_stat)
-                if save_mods["auto_fail"]:
-                    params["save_auto_fail"] = True
-                if save_mods["disadvantage"]:
-                    params["save_disadvantage"] = True
-            # Damage resistance (Petrified)
-            if has_damage_resistance(target_char):
-                params["damage_resistance"] = True
+            if actor_char.position and target_char.position:
+                params["distance"] = actor_char.position.distance_to(target_char.position)
+        if game_state.location and game_state.location.walkable_hexes:
+            params["walkable_hexes"] = game_state.location.walkable_hexes
 
         loop = asyncio.get_running_loop()
         action_result = await loop.run_in_executor(
