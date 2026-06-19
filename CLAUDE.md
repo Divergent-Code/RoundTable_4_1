@@ -48,9 +48,9 @@ Use `--reset-db` to wipe everything and start fresh: `./scripts/dev-start.sh --r
 
 - `StateService.get_game_state()` — loads JSON skeleton + hydrates entities from their tables
 - `StateService.save_game_state()` — saves entity data to their tables, then saves the skeleton (with entity IDs only) back to `game_states`
-- `StateService.emit_state_update()` — generates JSON Patch (RFC 6902) between old and new state, sends delta over WebSocket
+- `StateService.emit_state_update()` — compares old and new state dictionaries, broadcasting targeted Socket.IO events (`entity_moved`, `hp_changed`, etc.)
 
-**Client-side**: `SocketProvider.tsx` receives `game_state_update` (full state) or `game_state_patch` (delta). Uses `fast-json-patch` to apply patches. Zustand stores (`socket.ts`) hold reactive state.
+**Client-side**: `SocketProvider.tsx` receives `game_state_update` (full state) or granular socket delta events. Zustand store (`socket.ts`) handles reactive state updates via specific actions.
 
 ### Combat Loop
 
@@ -62,31 +62,31 @@ Use `--reset-db` to wipe everything and start fresh: `./scripts/dev-start.sh --r
 ### Real-Time Sync
 
 - Full state sent on `join_campaign` (connect/reconnect)
-- Incremental JSON Patches for all subsequent changes
-- `StateService._last_broadcasted_state` (class-level dict) caches last-sent state per campaign for diffing
+- Incremental granular Socket.IO delta events for all subsequent state changes
+- `StateService._last_broadcasted_state` (class-level dict backed by thread-safe `StateCache`) caches last-sent state per campaign for delta determination
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `backend/main.py` | FastAPI + Socket.IO ASGI app, startup hooks |
-| `backend/app/services/state_service.py` | State hydration, persistence, patch broadcasting |
+| `backend/app/services/state_service.py` | State hydration, persistence, delta event broadcasting |
 | `backend/app/services/turn_manager.py` | Combat turn loop with advisory locks |
 | `backend/app/services/combat_service.py` | Initiative, turn order, attack resolution |
 | `backend/app/services/ai_service.py` | LLM invocation (Gemini via LangChain) |
 | `backend/app/models.py` | Pydantic models: GameState, Player, Enemy, NPC, Coordinates |
 | `backend/game_engine/engine.py` | D&D 5e rules engine (attack/spell resolution) |
 | `backend/db/schema.py` | SQLAlchemy table definitions (24 tables) |
-| `frontend/src/lib/SocketProvider.tsx` | WebSocket connection, state sync, patch application |
+| `frontend/src/lib/SocketProvider.tsx` | WebSocket connection, state sync, granular event mapping |
 | `frontend/src/lib/socket.ts` | Zustand store for game state, messages, debug logs |
 | `frontend/src/components/BattlemapPanel.tsx` | SVG hex grid rendering |
 | `frontend/src/components/GameInterface.tsx` | Main game UI orchestrator |
 
 ## Known Fragile Areas
 
-1. **`StateService._last_broadcasted_state`** — class-level dict, never cleared when clients disconnect. Can produce invalid patches after all players leave and rejoin.
+1. **[RESOLVED] `StateService._last_broadcasted_state`** — class-level dict backed by thread-safe `StateCache`. It is now properly cleared when the last client disconnects from a campaign session via `handle_disconnect`.
 
-2. **`SocketProvider.tsx:134`** — patch application failure is caught but only logged to console. No recovery or resync. Client state can silently diverge from server.
+2. **[RESOLVED] `SocketProvider.tsx` patch application failure** — Retired with JSON Patching deprecation. The frontend now subscribes directly to granular delta events (`entity_moved`, `hp_changed`, etc.).
 
 3. **`TurnManager` lock cycling** — advisory locks prevent race conditions but the lock → advance → save → emit flow is complex. Errors mid-sequence can leave state inconsistent.
 
