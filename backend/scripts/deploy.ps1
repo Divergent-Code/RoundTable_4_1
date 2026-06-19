@@ -32,7 +32,7 @@ $DB_INSTANCE = "$PROJECT_ID`:$REGION`:roundtable-db"
 $DB_URL = "postgresql+asyncpg://postgres:roundtable_password@/postgres?host=/cloudsql/$DB_INSTANCE"
 
 # Get ALLOWED_USERS from env or default to empty
-$ALLOWED_USERS = $env:ALLOWED_USERS
+$env:ALLOWED_USERS = $env:ALLOWED_USERS
 if (-not $ALLOWED_USERS) {
     Write-Host "WARNING: ALLOWED_USERS is not set. Anyone will be able to sign up!" -ForegroundColor Yellow
     $ALLOWED_USERS = ""

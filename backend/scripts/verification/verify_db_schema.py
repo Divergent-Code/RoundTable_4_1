@@ -4,8 +4,9 @@ import os
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text, inspect
 
-# Add backend to path
-sys.path.append(os.path.join(os.getcwd(), 'backend'))
+# Add backend to path relative to script location
+backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(backend_dir)
 
 from db.schema import metadata
 
@@ -18,8 +19,6 @@ async def test_schema():
     try:
         async with engine.begin() as conn:
             await conn.run_sync(metadata.create_all)
-            print("Tables created.")
-
             print("Tables created.")
 
             def get_cols(table):

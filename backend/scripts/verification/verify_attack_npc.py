@@ -2,8 +2,9 @@ import asyncio
 import sys
 import os
 
-# Add backend to path
-sys.path.append(os.path.join(os.getcwd(), 'backend'))
+# Add backend to path relative to script location
+backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(backend_dir)
 
 from app.models import GameState, Location, Player, NPC, Coordinates
 from game_engine.engine import GameEngine

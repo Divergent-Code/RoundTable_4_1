@@ -4,8 +4,9 @@ import os
 import json
 from uuid import uuid4
 
-# Add backend to path
-sys.path.append(os.path.join(os.getcwd(), 'backend'))
+# Add backend to path relative to script location
+backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(backend_dir)
 
 from sqlalchemy import text
 from db.session import AsyncSessionLocal
