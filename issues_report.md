@@ -43,25 +43,24 @@ Offloaded reachable hex calculations to the backend via a new socket event handl
 
 ---
 
-## 4. AI Prompt Generation and Context Bloat (Medium Severity)
+## 4. [RESOLVED] AI Prompt Generation and Context Bloat (Medium Severity)
 **Description:** 
-`backend/app/services/ai_service.py` handles LangGraph interaction. To prevent token limits, there's logic that summarizes messages once over 30 messages are reached. However, if the summarization call fails or is delayed, the context window can theoretically unbounded. Furthermore, prompts are stitched using string interpolation and manual flag passing.
+`backend/app/services/ai_service.py` handles LangGraph interaction. To prevent token limits, there's logic that summarizes messages once over 30 messages are reached. However, if the summarization call failed or was delayed, the context window could theoretically grow unbounded.
 
 **Impact:**
-- **Reliability:** Unbounded contexts cause 400 errors from the LLM provider, crashing the AI permanently for a campaign until manually cleared.
-- **Maintainability:** Hardcoded string behaviors (`if flags and "ACTED_NOT_MOVED" in flags: ...`) make updating DM behaviors fragile.
+- **Reliability:** Unbounded contexts cause 400 errors from the LLM provider, crashing the AI permanently for a campaign.
 
-**Recommendation:**
-Move to structured extraction instead of text injection. Ensure summarization is done asynchronously via background worker (e.g., Celery or RQ) to prevent long request timeouts during chat emission.
+**Resolution:**
+Offloaded LLM summarization from the request-time chat generation path to a concurrent background task (`run_background_summarization`). Truncated active message history sent to the LLM during generation to a safe sliding window of the last 10 messages (plus summary context) when total message history exceeds 30 messages to avoid context bloat. Additionally, set the memory's `created_at` timestamp to the last message of the summarized split point to prevent history loss on subsequent fetches.
 
 ---
 
-## 5. Secret Key Fallback Anti-Pattern (Low Severity)
+## 5. [RESOLVED] Secret Key Fallback Anti-Pattern (Low Severity)
 **Description:**
-In `AIService.get_campaign_config`, the app falls back to an environment `GEMINI_API_KEY` if the campaign's custom key isn't set. 
+In `AIService.get_campaign_config`, the app fell back to an environment `GEMINI_API_KEY` if the campaign's custom key wasn't set. 
 
 **Impact:**
 - If users don't provide their own keys, the host's default key bears the cost and rate limit constraint of *all* campaigns on the server, easily hitting quota limits.
 
-**Recommendation:**
-Enforce that users must input their own keys per campaign, or implement strict token rate limiting on the fallback key.
+**Resolution:**
+Strictly enforced campaign-specific custom API keys inside `AIService.get_campaign_config`. The fallback to the environment-level key was removed; the API now throws a `400 HTTPException` if no custom API key is configured for a campaign, ensuring users bear their own AI resource costs.
