@@ -1,12 +1,331 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════════════
+   LIVING RECORD DESIGN SYSTEM — Phase 1
+   Two modes: [data-mode="manuscript"] (exploration) | [data-mode="iron"] (combat)
+   Default (no attribute) = manuscript
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Typography (loaded via <link> in index.html) ──────────────
+   IM Fell English  — display headings
+   Crimson Pro      — body prose
+   JetBrains Mono   — tactical / code
+   ─────────────────────────────────────────────────────────────── */
+
+/* ── Base tokens: Manuscript mode ──────────────────────────────── */
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  /* Surfaces */
+  --rt-bg:             #13100c;
+  --rt-surface:        #1e1912;
+  --rt-surface-raised: #26201a;
+  --rt-paper:          #f0e6cf;
+  --rt-parchment:      #e2d0aa;
+
+  /* Ink */
+  --rt-ink:            #2b1d0e;
+  --rt-ink-muted:      #6b4f35;
+  --rt-ink-faint:      #a08060;
+  --rt-ink-on-dark:    #e2d0aa;
+  --rt-ink-on-dark-muted: #a08060;
+
+  /* Accents */
+  --rt-gold:           #c9a84c;
+  --rt-gold-dim:       #7a5f28;
+  --rt-crimson:        #8b1f1f;
+  --rt-teal:           #2e7d6a;
+  --rt-teal-dim:       #1a4d40;
+
+  /* Borders */
+  --rt-border:         #3d2e1e;
+  --rt-border-light:   #5c4030;
+
+  /* Typography */
+  --rt-font-display:   'IM Fell English', Georgia, 'Times New Roman', serif;
+  --rt-font-body:      'Crimson Pro', Georgia, 'Times New Roman', serif;
+  --rt-font-mono:      'JetBrains Mono', 'Courier New', monospace;
+
+  /* Type scale */
+  --rt-text-xs:   0.75rem;
+  --rt-text-sm:   0.875rem;
+  --rt-text-base: 1.125rem;
+  --rt-text-lg:   1.375rem;
+  --rt-text-xl:   1.75rem;
+  --rt-text-2xl:  2.25rem;
+  --rt-text-3xl:  3rem;
+
+  /* Spacing */
+  --rt-space-1:  0.25rem;
+  --rt-space-2:  0.5rem;
+  --rt-space-3:  0.75rem;
+  --rt-space-4:  1rem;
+  --rt-space-6:  1.5rem;
+  --rt-space-8:  2rem;
+  --rt-space-12: 3rem;
+  --rt-space-16: 4rem;
+
+  /* Radius */
+  --rt-radius-sm: 2px;
+  --rt-radius-md: 4px;
+  --rt-radius-lg: 8px;
+
+  /* Shadows */
+  --rt-shadow-sm:  0 1px 3px rgba(0,0,0,0.4);
+  --rt-shadow-md:  0 4px 12px rgba(0,0,0,0.5);
+  --rt-shadow-lg:  0 8px 32px rgba(0,0,0,0.6);
+  --rt-shadow-ink: 2px 2px 0 rgba(43,29,14,0.3);
+
+  /* Transitions */
+  --rt-ease-mode:  600ms cubic-bezier(0.4, 0, 0.2, 1);
+  --rt-ease-fast:  120ms ease;
+  --rt-ease-std:   250ms ease;
+}
+
+/* ── Iron & Rivets mode overrides ──────────────────────────────── */
+[data-mode="iron"] {
+  --rt-bg:             #0a0c0e;
+  --rt-surface:        #131820;
+  --rt-surface-raised: #1c2430;
+  --rt-paper:          #1c2430;
+  --rt-parchment:      #253040;
+
+  --rt-ink:            #c8d8e8;
+  --rt-ink-muted:      #7a9ab8;
+  --rt-ink-faint:      #4a6278;
+  --rt-ink-on-dark:    #c8d8e8;
+  --rt-ink-on-dark-muted: #7a9ab8;
+
+  --rt-gold:           #e8920a;
+  --rt-gold-dim:       #7a4c08;
+  --rt-crimson:        #c0392b;
+  --rt-teal:           #1abc9c;
+  --rt-teal-dim:       #0d6b58;
+
+  --rt-border:         #2a3a4a;
+  --rt-border-light:   #3a5060;
+
+  --rt-shadow-ink:     0 0 8px rgba(232,146,10,0.2);
+}
+
+/* ── Base reset ────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  background-color: var(--rt-bg);
+  color: var(--rt-ink-on-dark);
+  font-family: var(--rt-font-body);
+  font-size: var(--rt-text-base);
+  line-height: 1.7;
+  transition:
+    background-color var(--rt-ease-mode),
+    color var(--rt-ease-mode);
+}
+
+/* ── Grain texture overlay ─────────────────────────────────────── */
+.rt-grain {
+  position: relative;
+  isolation: isolate;
+}
+
+.rt-grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.035;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  mix-blend-mode: overlay;
+}
+
+[data-mode="iron"] .rt-grain::after {
+  opacity: 0.06;
+  mix-blend-mode: screen;
+}
+
+/* ── Manuscript-mode paper surface ────────────────────────────── */
+.rt-paper {
+  background-color: var(--rt-paper);
+  color: var(--rt-ink);
+  transition:
+    background-color var(--rt-ease-mode),
+    color var(--rt-ease-mode);
+}
+
+/* ── Typography utilities ──────────────────────────────────────── */
+.rt-display {
+  font-family: var(--rt-font-display);
+  font-style: italic;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+}
+
+.rt-body {
+  font-family: var(--rt-font-body);
+  font-size: var(--rt-text-base);
+  line-height: 1.7;
+}
+
+.rt-mono {
+  font-family: var(--rt-font-mono);
+  font-size: var(--rt-text-sm);
+  letter-spacing: 0.04em;
+}
+
+.rt-label {
+  font-family: var(--rt-font-mono);
+  font-size: var(--rt-text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rt-ink-muted);
+  transition: color var(--rt-ease-mode);
+}
+
+/* Drop cap for manuscript prose */
+[data-mode="manuscript"] .rt-dropcap::first-letter,
+:not([data-mode]) .rt-dropcap::first-letter {
+  font-family: var(--rt-font-display);
+  font-size: 3.5em;
+  font-style: italic;
+  float: left;
+  line-height: 0.75;
+  margin: 0.1em 0.08em 0 0;
+  color: var(--rt-crimson);
+}
+
+/* ── Dividers ──────────────────────────────────────────────────── */
+.rt-rule {
+  border: none;
+  border-top: 1px solid var(--rt-border);
+  margin: var(--rt-space-8) 0;
+  transition: border-color var(--rt-ease-mode);
+}
+
+.rt-rule-ornate {
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--rt-gold-dim) 20%,
+    var(--rt-gold) 50%,
+    var(--rt-gold-dim) 80%,
+    transparent
+  );
+  margin: var(--rt-space-8) 0;
+  transition: background var(--rt-ease-mode);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.rt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rt-space-2);
+  padding: var(--rt-space-2) var(--rt-space-6);
+  font-family: var(--rt-font-mono);
+  font-size: var(--rt-text-sm);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid;
+  border-radius: var(--rt-radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--rt-ease-std),
+    border-color var(--rt-ease-std),
+    color var(--rt-ease-std),
+    box-shadow var(--rt-ease-std);
+  text-decoration: none;
+}
+
+.rt-btn-primary {
+  background-color: var(--rt-gold);
+  border-color: var(--rt-gold);
+  color: var(--rt-ink);
+}
+
+.rt-btn-primary:hover {
+  background-color: var(--rt-gold-dim);
+  border-color: var(--rt-gold-dim);
+  box-shadow: var(--rt-shadow-md);
+}
+
+.rt-btn-ghost {
+  background-color: transparent;
+  border-color: var(--rt-border-light);
+  color: var(--rt-ink-on-dark);
+}
+
+.rt-btn-ghost:hover {
+  border-color: var(--rt-gold);
+  color: var(--rt-gold);
+}
+
+.rt-btn-danger {
+  background-color: transparent;
+  border-color: var(--rt-crimson);
+  color: var(--rt-crimson);
+}
+
+.rt-btn-danger:hover {
+  background-color: var(--rt-crimson);
+  color: var(--rt-paper);
+  box-shadow: 0 0 12px rgba(139,31,31,0.4);
+}
+
+/* ── Cards / panels ────────────────────────────────────────────── */
+.rt-card {
+  background-color: var(--rt-surface-raised);
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-radius-md);
+  padding: var(--rt-space-6);
+  transition:
+    background-color var(--rt-ease-mode),
+    border-color var(--rt-ease-mode);
+}
+
+/* ── Mode transition animation ─────────────────────────────────── */
+@keyframes rt-flicker-in {
+  0%   { opacity: 0; filter: brightness(2); }
+  15%  { opacity: 0.6; filter: brightness(1.4); }
+  30%  { opacity: 0.3; filter: brightness(1.8); }
+  60%  { opacity: 0.9; filter: brightness(1.1); }
+  100% { opacity: 1; filter: brightness(1); }
+}
+
+@keyframes rt-unfurl {
+  from { opacity: 0; transform: translateY(-6px) scaleY(0.97); }
+  to   { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+
+.rt-animate-flicker {
+  animation: rt-flicker-in 500ms ease forwards;
+}
+
+.rt-animate-unfurl {
+  animation: rt-unfurl 400ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--rt-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--rt-border-light);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--rt-gold-dim);
 }
