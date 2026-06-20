@@ -7,6 +7,12 @@ venv/
 # Environment Variables
 .env
 .env*
+.claude
+.codex
+.cursor
+.gemini
+.qodo
+.vscode
 
 # Database
 *.db

@@ -10,6 +10,7 @@ import UsersPage from "@/pages/Users";
 import AuthGuard from "@/components/AuthGuard";
 import RootRedirector from "@/components/RootRedirector";
 import LogViewer from "@/pages/LogViewer";
+import DesignDemo from "@/pages/DesignDemo";
 import { useAuthStore } from "@/store/authStore";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
@@ -40,6 +41,7 @@ function App() {
         <Route path="/create-character" element={<AuthGuard><CreateCharacterPage /></AuthGuard>} />
         <Route path="/users" element={<AuthGuard><UsersPage /></AuthGuard>} />
         <Route path="/logs" element={<AuthGuard><LogViewer /></AuthGuard>} />
+        <Route path="/design-demo" element={<DesignDemo />} />
       </Routes>
     </BrowserRouter>
     </ErrorBoundary>
