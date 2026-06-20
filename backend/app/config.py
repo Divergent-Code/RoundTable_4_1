@@ -11,8 +11,8 @@ class Settings:
 
     # CORS
     DEFAULT_ORIGINS = [
-        "https://roundtable41-1dc2c.web.app",
-        "https://roundtable41-1dc2c.firebaseapp.com",
+        "https://roundtable41-1dc2c-ee519.web.app",
+        "https://roundtable41-1dc2c-ee519.firebaseapp.com",
         "http://localhost:3000",
         "http://localhost:5173",
         "http://127.0.0.1:3000",

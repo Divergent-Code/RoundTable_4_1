@@ -129,7 +129,7 @@ info "Starting Firebase emulators..."
 cd "$PROJECT_ROOT"
 npx -y -p firebase-tools firebase emulators:start \
     --only auth,firestore \
-    --project roundtable41-1dc2c \
+    --project roundtable41-1dc2c-ee519 \
     > "$LOG_DIR/firebase.log" 2>&1 &
 FIREBASE_PID=$!
 

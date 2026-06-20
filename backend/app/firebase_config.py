@@ -59,15 +59,15 @@ WWxQ6RfITJQIg5LNTQ6axUg9c5LabzPVnc3bcsxAaW5ObtbNo8MWSwnZfWj3TWyo
 
                 cred = credentials.Certificate({
                     "type": "service_account",
-                    "project_id": "roundtable41-1dc2c",
+                    "project_id": "roundtable41-1dc2c-ee519",
                     "private_key_id": "dummy_key_id",
                     "private_key": final_key.replace("\\n", "\n"),
-                    "client_email": "firebase-adminsdk-dummy@roundtable41-1dc2c.iam.gserviceaccount.com",
+                    "client_email": "firebase-adminsdk-dummy@roundtable41-1dc2c-ee519.iam.gserviceaccount.com",
                     "client_id": "dummy_client_id",
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
                     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-dummy%40roundtable41-1dc2c.iam.gserviceaccount.com"
+                    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-dummy%40roundtable41-1dc2c-ee519.iam.gserviceaccount.com"
                 })
             else:
                 # Production: Use Service Account content from env or file
@@ -76,7 +76,7 @@ WWxQ6RfITJQIg5LNTQ6axUg9c5LabzPVnc3bcsxAaW5ObtbNo8MWSwnZfWj3TWyo
                 logger.info("Connecting to Production Firestore")
 
             firebase_admin.initialize_app(cred, {
-                'projectId': 'roundtable41-1dc2c' # From .firebaserc
+                'projectId': 'roundtable41-1dc2c-ee519' # From .firebaserc
             })
 
             logger.info("Firebase Admin Initialized")
